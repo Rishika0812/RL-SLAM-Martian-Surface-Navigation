@@ -115,7 +115,7 @@ def main():
         # Render the initial state
         img = st.session_state.env.render_opencv()
         img_pil = Image.fromarray(cv2.cvtColor(img, cv2.COLOR_BGR2RGB))
-        map_placeholder.image(img_pil, use_column_width=True)
+        map_placeholder.image(img_pil, use_container_width=True)
     
     with col2:
         # Controls and metrics
@@ -159,7 +159,7 @@ def main():
                         if episode % max(1, num_episodes // 10) == 0 and steps % 10 == 0:
                             img = st.session_state.env.render_opencv()
                             img_pil = Image.fromarray(cv2.cvtColor(img, cv2.COLOR_BGR2RGB))
-                            map_placeholder.image(img_pil, use_column_width=True)
+                            map_placeholder.image(img_pil, use_container_width=True)
                             
                             # Brief delay to allow visualization
                             time.sleep(0.001)
@@ -221,7 +221,7 @@ def main():
                 # Render the reset state
                 img = st.session_state.env.render_opencv()
                 img_pil = Image.fromarray(cv2.cvtColor(img, cv2.COLOR_BGR2RGB))
-                map_placeholder.image(img_pil, use_column_width=True)
+                map_placeholder.image(img_pil, use_container_width=True)
             
             # Manual control buttons (for testing)
             st.subheader("Manual Control")
@@ -236,7 +236,7 @@ def main():
                     # Render the environment
                     img = st.session_state.env.render_opencv()
                     img_pil = Image.fromarray(cv2.cvtColor(img, cv2.COLOR_BGR2RGB))
-                    map_placeholder.image(img_pil, use_column_width=True)
+                    map_placeholder.image(img_pil, use_container_width=True)
             
             with col2:
                 if st.button("⬆️ Forward"):
@@ -248,7 +248,7 @@ def main():
                     # Render the environment
                     img = st.session_state.env.render_opencv()
                     img_pil = Image.fromarray(cv2.cvtColor(img, cv2.COLOR_BGR2RGB))
-                    map_placeholder.image(img_pil, use_column_width=True)
+                    map_placeholder.image(img_pil, use_container_width=True)
             
             with col3:
                 if st.button("➡️ Turn Right"):
@@ -260,7 +260,7 @@ def main():
                     # Render the environment
                     img = st.session_state.env.render_opencv()
                     img_pil = Image.fromarray(cv2.cvtColor(img, cv2.COLOR_BGR2RGB))
-                    map_placeholder.image(img_pil, use_column_width=True)
+                    map_placeholder.image(img_pil, use_container_width=True)
             
             # Display metrics
             st.subheader("Current Metrics")
@@ -613,7 +613,7 @@ def main():
         # Render the environment
         img = st.session_state.env.render_opencv()
         img_pil = Image.fromarray(cv2.cvtColor(img, cv2.COLOR_BGR2RGB))
-        map_placeholder.image(img_pil, use_column_width=True)
+        map_placeholder.image(img_pil, use_container_width=True)
         
         # Check if episode is done
         if done:
