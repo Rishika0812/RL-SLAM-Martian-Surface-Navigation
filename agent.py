@@ -41,6 +41,11 @@ class SimpleAgent:
         self.consecutive_revisits = 0  # Track repeated states
         self.exploration_bonus = 0.5   # Bonus for exploring new states
         
+        self.stuck_threshold = 5  # Number of steps to consider agent as stuck
+        self.position_history = deque(maxlen=10)  # Store recent positions
+        self.corner_penalty = -0.5  # Penalty for staying in corners
+        self.movement_bonus = 0.2   # Bonus for moving to new areas
+        
     def _get_state_key(self, state):
         """Convert state array to a hashable key with improved discretization"""
         rounded_state = []
@@ -63,39 +68,120 @@ class SimpleAgent:
                 rounded_state.append(min(bin_index, self.angle_bins - 1))
         return tuple(rounded_state)
         
+    def _is_in_corner(self, state):
+        """Detect if agent is in a corner or against a wall"""
+        sensor_readings = state[:8]
+        left_sensors = sensor_readings[:4]
+        right_sensors = sensor_readings[4:]
+        
+        # Check for corner patterns in sensor readings
+        left_blocked = np.mean(left_sensors) < 0.3 * self.map_size
+        right_blocked = np.mean(right_sensors) < 0.3 * self.map_size
+        front_blocked = np.mean(sensor_readings[3:5]) < 0.3 * self.map_size
+        
+        return (left_blocked and front_blocked) or (right_blocked and front_blocked)
+    
+    def _is_stuck(self):
+        """Check if agent is stuck by analyzing recent positions"""
+        if len(self.position_history) < self.stuck_threshold:
+            return False
+            
+        recent_positions = np.array(self.position_history)
+        max_distance = np.max(np.linalg.norm(recent_positions - recent_positions[0], axis=1))
+        return max_distance < 0.5  # If haven't moved more than 0.5 units
+        
     def act(self, state):
-        """Action selection using average of both Q-tables"""
+        """Enhanced action selection with corner escape behavior"""
         state_key = self._get_state_key(state)
         
-        if np.random.rand() <= self.epsilon:
-            # Exploration logic remains the same
-            sensor_readings = state[:8]
-            left_space = np.mean(sensor_readings[:4])
-            right_space = np.mean(sensor_readings[4:])
-            front_space = np.mean(sensor_readings[3:5])
-            
-            if front_space > 0.7 * self.map_size:
-                return 0
-            if max(left_space, right_space) > 0.3 * self.map_size:
-                return 1 if left_space > right_space else 2
-            return np.random.choice([0, 1, 2], p=[0.4, 0.3, 0.3])
+        # Store position for stuck detection
+        position = state[8:10]  # Extract position from state
+        self.position_history.append(position)
         
-        # Exploitation using average of both Q-tables
+        # Check if stuck in corner or against wall
+        in_corner = self._is_in_corner(state)
+        is_stuck = self._is_stuck()
+        
+        # Increase exploration if stuck or in corner
+        local_epsilon = self.epsilon
+        if in_corner or is_stuck:
+            local_epsilon = min(1.0, self.epsilon * 2)  # Double exploration rate
+        
+        if np.random.rand() <= local_epsilon:
+            sensor_readings = state[:8]
+            
+            # If stuck or in corner, prioritize escape
+            if in_corner or is_stuck:
+                # Find the direction with most open space
+                left_space = np.mean(sensor_readings[:4])
+                right_space = np.mean(sensor_readings[4:])
+                front_space = np.mean(sensor_readings[3:5])
+                
+                # Choose direction with most space
+                spaces = [front_space, left_space, right_space]
+                max_space_idx = np.argmax(spaces)
+                
+                if max_space_idx == 0 and front_space > 0.3 * self.map_size:
+                    return 0  # Move forward if enough space
+                elif max_space_idx == 1:
+                    return 1  # Turn left
+                else:
+                    return 2  # Turn right
+            
+            # Normal exploration strategy
+            if np.mean(sensor_readings) > 0.7 * self.map_size:  # In open space
+                return 0  # Prefer forward movement
+            elif np.random.rand() < 0.7:  # 70% chance of intelligent choice
+                left_space = np.mean(sensor_readings[:4])
+                right_space = np.mean(sensor_readings[4:])
+                return 1 if left_space > right_space else 2
+            else:
+                return np.random.choice([0, 1, 2], p=[0.5, 0.25, 0.25])
+        
+        # Exploitation with corner avoidance
         if state_key in self.q_table_1 and state_key in self.q_table_2:
             q_values_1 = np.array(self.q_table_1[state_key])
             q_values_2 = np.array(self.q_table_2[state_key])
             average_q = (q_values_1 + q_values_2) / 2
+            
+            # Apply penalties/bonuses based on predicted next states
+            for action in range(self.action_size):
+                next_state = self._predict_next_state(state, action)
+                if self._is_in_corner(next_state):
+                    average_q[action] += self.corner_penalty
+                elif not any(np.array_equal(self._predict_next_state(state, action)[8:10], 
+                           pos) for pos in self.position_history):
+                    average_q[action] += self.movement_bonus
+            
             return np.argmax(average_q)
         
-        # Initialize new state in both tables
-        if state_key not in self.q_table_1:
-            self.q_table_1[state_key] = np.ones(self.action_size) * 0.1
-        if state_key not in self.q_table_2:
-            self.q_table_2[state_key] = np.ones(self.action_size) * 0.1
-        return 0
-            
+        return 0  # Default to forward movement for new states
+        
+    def _predict_next_state(self, state, action):
+        """Predict next state based on action"""
+        next_state = np.array(state)
+        if action == 0:  # Forward
+            # Update position based on current angle
+            angle = state[10]
+            next_state[8] += 0.1 * np.cos(angle)  # x position
+            next_state[9] += 0.1 * np.sin(angle)  # y position
+        elif action == 1:  # Left
+            next_state[10] = (next_state[10] + 0.2) % (2 * np.pi)  # Update angle
+        else:  # Right
+            next_state[10] = (next_state[10] - 0.2) % (2 * np.pi)  # Update angle
+        return next_state
+        
     def remember(self, state, action, reward, next_state, done):
-        """Store experience in memory with priority"""
+        """Enhanced memory with corner penalties"""
+        # Add corner penalty to reward if applicable
+        if self._is_in_corner(state):
+            reward += self.corner_penalty
+        
+        # Add movement bonus if exploring new area
+        if not any(np.array_equal(next_state[8:10], pos) for pos in self.position_history):
+            reward += self.movement_bonus
+        
+        # Store experience with modified reward
         state_key = self._get_state_key(state)
         next_state_key = self._get_state_key(next_state)
         
@@ -104,14 +190,14 @@ class SimpleAgent:
             self.q_table_1[state_key] = np.zeros(self.action_size)
         if next_state_key not in self.q_table_1:
             self.q_table_1[next_state_key] = np.zeros(self.action_size)
-            
+        
         current_q = self.q_table_1[state_key][action]
         next_q = np.max(self.q_table_1[next_state_key]) if not done else 0
         td_error = abs(reward + self.gamma * next_q - current_q)
         
-        # Store experience with priority
-        priority = (td_error + 1e-6) ** self.priority_alpha
-        self.priority_memory.append((state_key, action, reward, next_state_key, done, priority))
+        # Store in priority memory
+        self.priority_memory.append((state_key, action, reward, next_state_key, done, 
+                                   (td_error + 1e-6) ** self.priority_alpha))
         
         # Keep memory size limited
         if len(self.priority_memory) > 10000:
