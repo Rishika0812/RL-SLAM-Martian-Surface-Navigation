@@ -136,10 +136,3 @@ Potential areas for project expansion:
 - OpenAI Gym Documentation
 - Streamlit Documentation
 
-## 📄 License
-
-This project is licensed under the MIT License - see the LICENSE file for details.
-
-## ✉️ Contact
-
-For questions, feature requests, or bug reports, please open an issue on GitHub. 
