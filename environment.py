@@ -67,19 +67,20 @@ class SimpleRoverEnv(gym.Env):
         return obstacles
     
     def _get_sensor_readings(self):
-        """Get sensor readings in 8 directions for better coverage"""
+        """Get sensor readings in 8 directions with improved accuracy"""
         readings = np.ones(8) * self.map_size  # Initialize with max distance
         
         # Directions: 8 directions at 45-degree intervals
         angles = [self.rover_angle + i * np.pi/4 for i in range(8)]
         directions = [(np.cos(angle), np.sin(angle)) for angle in angles]
         
-        # Maximum sensor range
+        # Maximum sensor range with reduced noise
         max_range = self.map_size
+        self.sensor_noise = 0.05  # Reduced noise for better accuracy
         
-        # Check distance to obstacles in each direction
+        # Check distance to obstacles in each direction with improved resolution
         for i, (dx, dy) in enumerate(directions):
-            for step in np.arange(0.5, max_range, 0.5):  # More precise steps
+            for step in np.arange(0.2, max_range, 0.2):  # More precise steps
                 x = self.rover_pos[0] + step * dx
                 y = self.rover_pos[1] + step * dy
                 
@@ -88,19 +89,26 @@ class SimpleRoverEnv(gym.Env):
                     readings[i] = step
                     break
                 
-                # Check if hit obstacle
+                # Check if hit obstacle with improved detection
                 for (ox, oy, size) in self.obstacles:
                     if np.linalg.norm(np.array([x, y]) - np.array([ox, oy])) < size:
-                        # Add small noise to sensor readings for realism
+                        # Add smaller noise to sensor readings
                         noise = np.random.normal(0, self.sensor_noise)
                         readings[i] = step + noise
                         readings[i] = max(0.1, readings[i])  # Ensure positive readings
                         
-                        # Update SLAM map with probability
+                        # Update SLAM map with improved probability
                         map_x, map_y = int(x), int(y)
                         if 0 <= map_x < self.map_size and 0 <= map_y < self.map_size:
-                            # More definitive obstacle marking (1.0 instead of previous fixed value)
-                            self.map[map_x, map_y] = 1.0
+                            # Update surrounding cells for better obstacle representation
+                            for dx in range(-1, 2):
+                                for dy in range(-1, 2):
+                                    nx, ny = map_x + dx, map_y + dy
+                                    if 0 <= nx < self.map_size and 0 <= ny < self.map_size:
+                                        # Decrease probability with distance
+                                        dist = np.sqrt(dx**2 + dy**2)
+                                        prob = max(0, 1 - 0.3 * dist)
+                                        self.map[nx, ny] = max(self.map[nx, ny], prob)
                         break
         
         return readings
@@ -179,23 +187,54 @@ class SimpleRoverEnv(gym.Env):
         # Base reward for surviving
         reward += 0.01
         
-        # Reward for exploration - count newly visited cells
+        # Enhanced exploration reward - reward for visiting new areas
         new_cells_visited = np.sum(self.visited_map > 0) - np.sum(self.visited_map > 0.1)
-        reward += 0.1 * new_cells_visited
+        reward += 0.2 * new_cells_visited  # Increased reward for exploration
         
-        # Movement reward - encourage forward movement rather than spinning
+        # Movement reward - encourage forward movement and exploration
         if action == 0 and not collision:  # Successfully moved forward
-            reward += 0.05
+            # Reward based on distance from previously visited areas
+            current_pos = self.rover_pos
+            min_dist_to_visited = float('inf')
+            for x in range(self.map_size):
+                for y in range(self.map_size):
+                    if self.visited_map[x, y] > 0:
+                        dist = np.linalg.norm(current_pos - np.array([x, y]))
+                        min_dist_to_visited = min(min_dist_to_visited, dist)
+            reward += 0.1 * (1 - min(min_dist_to_visited / self.map_size, 1))
         
-        # Obstacle discovery reward
+        # Enhanced obstacle discovery reward
         obstacle_cells = np.sum(self.map > 0.9)
-        reward += 0.01 * obstacle_cells
+        reward += 0.02 * obstacle_cells  # Increased reward for obstacle detection
         
-        # Penalty for staying still - encourages exploration
+        # Reward for accurate mapping
+        true_positives = 0
+        false_positives = 0
+        for x in range(self.map_size):
+            for y in range(self.map_size):
+                if self.map[x, y] > 0.8:  # Detected obstacle
+                    is_actual_obstacle = False
+                    for (ox, oy, size) in self.obstacles:
+                        if np.linalg.norm(np.array([x, y]) - np.array([ox, oy])) < size:
+                            is_actual_obstacle = True
+                            break
+                    if is_actual_obstacle:
+                        true_positives += 1
+                    else:
+                        false_positives += 1
+        mapping_accuracy = true_positives / max(1, true_positives + false_positives)
+        reward += 0.1 * mapping_accuracy  # Reward for accurate mapping
+        
+        # Penalty for staying still or moving in circles
         if len(self.path_history) > 5:
             recent_positions = np.array(self.path_history[-5:])
             if np.max(np.std(recent_positions, axis=0)) < 0.2:  # Not moving much
-                reward -= 0.1
+                reward -= 0.2  # Increased penalty for staying still
+        
+        # Reward for efficient path planning
+        unique_positions = len(np.unique(np.round(np.array(self.path_history), 1), axis=0))
+        path_efficiency = unique_positions / max(1, len(self.path_history))
+        reward += 0.05 * path_efficiency  # Reward for efficient path planning
         
         # Check if done
         done = self.current_step >= self.max_steps

@@ -113,9 +113,17 @@ def main():
         map_placeholder = st.empty()
         
         # Render the initial state
-        img = st.session_state.env.render_opencv()
-        img_pil = Image.fromarray(cv2.cvtColor(img, cv2.COLOR_BGR2RGB))
-        map_placeholder.image(img_pil, use_container_width=True)
+        try:
+            img = st.session_state.env.render_opencv()
+            if img is not None:
+                img_rgb = cv2.cvtColor(img, cv2.COLOR_BGR2RGB)
+                img_pil = Image.fromarray(img_rgb)
+                map_placeholder.image(img_pil, width=None)
+            else:
+                st.error("Failed to render environment - null image returned")
+        except Exception as e:
+            st.error(f"Error rendering environment: {str(e)}")
+
     
     with col2:
         # Controls and metrics
@@ -157,9 +165,15 @@ def main():
                         
                         # Update visualization occasionally during training
                         if episode % max(1, num_episodes // 10) == 0 and steps % 10 == 0:
-                            img = st.session_state.env.render_opencv()
-                            img_pil = Image.fromarray(cv2.cvtColor(img, cv2.COLOR_BGR2RGB))
-                            map_placeholder.image(img_pil, use_container_width=True)
+                            try:
+                                img = st.session_state.env.render_opencv()
+                                if img is not None:
+                                    img_rgb = cv2.cvtColor(img, cv2.COLOR_BGR2RGB)
+                                    img_pil = Image.fromarray(img_rgb)
+                                    map_placeholder.image(img_pil, width=None)
+                            except Exception as e:
+                                st.error(f"Error updating visualization: {str(e)}")
+                                continue
                             
                             # Brief delay to allow visualization
                             time.sleep(0.001)
@@ -205,9 +219,7 @@ def main():
             
             # Start/Stop button
             start_stop_button = st.button(
-                "⏹️ Stop Simulation" if st.session_state.running else "▶️ Start Simulation", 
-                use_container_width=True
-            )
+                "⏹️ Stop Simulation" if st.session_state.running else "▶️ Start Simulation", use_container_width=True)
             if start_stop_button:
                 st.session_state.running = not st.session_state.running
             
@@ -220,8 +232,9 @@ def main():
                 
                 # Render the reset state
                 img = st.session_state.env.render_opencv()
-                img_pil = Image.fromarray(cv2.cvtColor(img, cv2.COLOR_BGR2RGB))
-                map_placeholder.image(img_pil, use_container_width=True)
+                img_rgb = cv2.cvtColor(img, cv2.COLOR_BGR2RGB)
+                img_pil = Image.fromarray(img_rgb)
+                map_placeholder.image(img_pil, width=None)
             
             # Manual control buttons (for testing)
             st.subheader("Manual Control")
@@ -234,9 +247,16 @@ def main():
                     st.session_state.steps += 1
                     
                     # Render the environment
-                    img = st.session_state.env.render_opencv()
-                    img_pil = Image.fromarray(cv2.cvtColor(img, cv2.COLOR_BGR2RGB))
-                    map_placeholder.image(img_pil, use_container_width=True)
+                    try:
+                        img = st.session_state.env.render_opencv()
+                        if img is not None:
+                            img_rgb = cv2.cvtColor(img, cv2.COLOR_BGR2RGB)
+                            img_pil = Image.fromarray(img_rgb)
+                            map_placeholder.image(img_pil, width=None)
+                        else:
+                            st.error("Failed to render environment - null image returned")
+                    except Exception as e:
+                        st.error(f"Error rendering environment: {str(e)}")
             
             with col2:
                 if st.button("⬆️ Forward"):
@@ -246,9 +266,16 @@ def main():
                     st.session_state.steps += 1
                     
                     # Render the environment
-                    img = st.session_state.env.render_opencv()
-                    img_pil = Image.fromarray(cv2.cvtColor(img, cv2.COLOR_BGR2RGB))
-                    map_placeholder.image(img_pil, use_container_width=True)
+                    try:
+                        img = st.session_state.env.render_opencv()
+                        if img is not None:
+                            img_rgb = cv2.cvtColor(img, cv2.COLOR_BGR2RGB)
+                            img_pil = Image.fromarray(img_rgb)
+                            map_placeholder.image(img_pil, width=None)
+                        else:
+                            st.error("Failed to render environment - null image returned")
+                    except Exception as e:
+                        st.error(f"Error rendering environment: {str(e)}")
             
             with col3:
                 if st.button("➡️ Turn Right"):
@@ -258,9 +285,16 @@ def main():
                     st.session_state.steps += 1
                     
                     # Render the environment
-                    img = st.session_state.env.render_opencv()
-                    img_pil = Image.fromarray(cv2.cvtColor(img, cv2.COLOR_BGR2RGB))
-                    map_placeholder.image(img_pil, use_container_width=True)
+                    try:
+                        img = st.session_state.env.render_opencv()
+                        if img is not None:
+                            img_rgb = cv2.cvtColor(img, cv2.COLOR_BGR2RGB)
+                            img_pil = Image.fromarray(img_rgb)
+                            map_placeholder.image(img_pil, width=None)
+                        else:
+                            st.error("Failed to render environment - null image returned")
+                    except Exception as e:
+                        st.error(f"Error rendering environment: {str(e)}")
             
             # Display metrics
             st.subheader("Current Metrics")
@@ -549,16 +583,32 @@ def main():
 
     # Run simulation if in running state
     if st.session_state.running and st.session_state.training_complete:
-        # Use the trained agent to select an action
-        action = st.session_state.agent.act(st.session_state.obs)
-        
-        # Take a step in the environment
-        next_obs, reward, done, info = st.session_state.env.step(action)
-        
-        # Update state
-        st.session_state.obs = next_obs
-        st.session_state.rewards.append(reward)
-        st.session_state.steps += 1
+        try:
+            # Use the trained agent to select an action
+            action = st.session_state.agent.act(st.session_state.obs)
+            
+            # Take a step in the environment
+            next_obs, reward, done, info = st.session_state.env.step(action)
+            
+            # Update state
+            st.session_state.obs = next_obs
+            st.session_state.rewards.append(reward)
+            st.session_state.steps += 1
+            
+            # Update visualization
+            try:
+                img = st.session_state.env.render_opencv()
+                if img is not None:
+                    img_rgb = cv2.cvtColor(img, cv2.COLOR_BGR2RGB)
+                    img_pil = Image.fromarray(img_rgb)
+                    map_placeholder.image(img_pil, width=None)
+                else:
+                    st.error("Failed to render environment - null image returned")
+            except Exception as e:
+                st.error(f"Error updating visualization: {str(e)}")
+        except Exception as e:
+            st.error(f"Error in simulation step: {str(e)}")
+            st.session_state.running = False  # Stop simulation on error
         
         # Update evaluation metrics (every 5 steps to avoid excessive updates)
         if st.session_state.steps % 5 == 0:
@@ -612,8 +662,9 @@ def main():
         
         # Render the environment
         img = st.session_state.env.render_opencv()
-        img_pil = Image.fromarray(cv2.cvtColor(img, cv2.COLOR_BGR2RGB))
-        map_placeholder.image(img_pil, use_container_width=True)
+        img_rgb = cv2.cvtColor(img, cv2.COLOR_BGR2RGB)
+        img_pil = Image.fromarray(img_rgb)
+        map_placeholder.image(img_pil, width=None)
         
         # Check if episode is done
         if done:
